@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Å bo i utlandet — og flytte hjem igjen — Teust Science</title>
+  <meta name="description" content="En Teust Science-pilot for mennesker som har bodd i utlandet og senere flyttet hjem igjen.">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="canonical" href="https://teust.com/science/living-abroad/">
+  <link rel="stylesheet" href="https://teust.com/assets/styles.css">
+  <link rel="stylesheet" href="./assets/science-living-abroad.css">
+  <script type="module" src="./assets/science-living-abroad.js" defer></script>
+</head>
+<body class="science-survey-page">
+  <a class="skip-link" href="#main-content">Hopp til innhold</a>
+  <header class="site-header">
+    <div class="wrap site-bar">
+      <a class="brand" href="https://teust.com/" aria-label="Teust hjem"><img src="https://teust.com/assets/brand/masthead.svg" alt="Teust"></a>
+      <nav class="global-nav" aria-label="Primær"><a href="https://teust.com/">Teust</a><a href="https://teust.com/say-it-well/">Say It Well</a><a href="https://teust.com/articles/">Stories</a><a href="https://teust.com/about/">About</a></nav>
+    </div>
+  </header>
+  <main id="main-content">
+    <section class="science-hero">
+      <div class="wrap science-hero-grid">
+        <div>
+          <div class="science-kicker">TEUST SCIENCE / PILOT 01</div>
+          <h1>Hva endrer seg når du bor i et annet land — og hva skjer når du flytter hjem igjen?</h1>
+          <p class="science-lead">Denne undersøkelsen er for deg som faktisk har bodd i utlandet og senere flyttet hjem. Vi spør om livet før du dro, hvordan det faktisk var mens du bodde ute, og hvilke forskjeller du merket etter hjemkomst.</p>
+        </div>
+        <aside class="science-note">
+          <strong>100 spørsmål · 10 korte kapitler</strong>
+          <p>Ikke ferie. Ikke forventninger. Faktiske erfaringer med hverdag, helse, relasjoner, arbeid, økonomi, tilhørighet og hjemkomst.</p>
+        </aside>
+      </div>
+    </section>
+    <section class="wrap science-consent" aria-labelledby="consent-title">
+      <div>
+        <div class="science-kicker">FØR DU STARTER</div>
+        <h2 id="consent-title">Frivillig. Ingen diagnose. Ingen salgsprofil.</h2>
+        <p>Velg det utenlandsoppholdet som var lengst eller mest betydningsfullt for deg, og bruk det samme oppholdet gjennom hele undersøkelsen. Sensitive spørsmål kan hoppes over.</p>
+        <p>Denne piloten tester spørsmålsdesignet. Svarene sendes ikke til Teust i denne versjonen; de lagres bare i nettleseren din. Når innsamlingsløsningen kobles på, skal samtykke, lagring og sletting beskrives eksplisitt før et eneste svar sendes.</p>
+      </div>
+      <label class="consent-check"><input id="consent" type="checkbox"> <span>Jeg forstår at dette er en pilot og vil teste undersøkelsen.</span></label>
+      <button id="start-survey" class="science-button" type="button" disabled>Start</button>
+    </section>
+    <section id="survey-shell" class="science-shell" hidden>
+      <div class="science-progress-wrap">
+        <div class="wrap science-progress-row"><span id="progress-label">0 av 100 besvart</span><span id="section-label">Kapittel 1 av 10</span></div>
+        <div class="science-progress" aria-hidden="true"><span id="progress-bar"></span></div>
+      </div>
+      <form id="science-form" class="wrap" novalidate>
+        <div id="questionnaire"></div>
+        <div class="science-actions">
+          <button id="prev-section" class="science-button science-button--ghost" type="button">Forrige</button>
+          <button id="next-section" class="science-button" type="button">Neste kapittel</button>
+          <button id="finish-survey" class="science-button" type="submit" hidden>Fullfør piloten</button>
+        </div>
+      </form>
+    </section>
+    <section id="science-complete" class="wrap science-complete" hidden>
+      <div class="science-kicker">FERDIG</div>
+      <h2>Det var 100.</h2>
+      <p id="complete-summary"></p>
+      <p>Denne pilotversjonen har ikke sendt noe ut av nettleseren din. Du kan eksportere en anonym JSON-fil for intern testing, eller slette alt lokalt.</p>
+      <div class="science-actions science-actions--left">
+        <button id="export-answers" class="science-button" type="button">Eksporter testsvar</button>
+        <button id="clear-answers" class="science-button science-button--ghost" type="button">Slett lokale svar</button>
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer"><div class="wrap footer-grid"><div><strong>Teust Science</strong><p>Question assumptions. Measure what changes.</p></div><div><a href="https://teust.com/about/">About Teust</a></div><div><a href="https://teust.com/">teust.com</a></div><div><span>hello@teust.com</span></div></div></footer>
+</body>
+</html>
