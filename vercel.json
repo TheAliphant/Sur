@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/courier.js": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/api/courier" }
+  ]
+}
