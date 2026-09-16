@@ -1,0 +1,54 @@
+name: Probe public Nano courier x402 endpoint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/nano-courier-x402-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify public metadata and unpaid 402 contract
+        env:
+          ENDPOINT: https://nano-courier-x402-tindeth-s-projects.vercel.app/api/courier
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            code=$(curl --silent --show-error --location --output metadata.json --write-out '%{http_code}' "$ENDPOINT" || true)
+            [ "$code" = "200" ] && break
+            sleep 10
+          done
+          test "$code" = "200"
+          python3 - <<'PY'
+          import json
+          data = json.load(open('metadata.json'))
+          assert data['status'] == 'READY'
+          assert data['payment']['scheme'] == 'exact'
+          assert data['payment']['network'] == 'nano:mainnet'
+          assert data['price'] == '0.25 XNO'
+          assert data['source'] == 'https://github.com/TheAliphant/Sur/blob/main/api/courier.js'
+          PY
+
+          curl --silent --show-error --location --dump-header headers.txt --output unpaid.json \
+            --request POST --header 'content-type: application/json' --data '{}' "$ENDPOINT" || true
+          python3 - <<'PY'
+          import base64, json
+          headers = open('headers.txt').read().splitlines()
+          status = next(line for line in headers if line.startswith('HTTP/'))
+          assert ' 402 ' in status, status
+          encoded = next(line.split(':', 1)[1].strip() for line in headers if line.lower().startswith('payment-required:'))
+          quote = json.loads(base64.b64decode(encoded))
+          [accepted] = quote['accepts']
+          assert quote['x402Version'] == 2
+          assert accepted['scheme'] == 'exact'
+          assert accepted['network'] == 'nano:mainnet'
+          assert accepted['asset'] == 'XNO'
+          assert accepted['amount'] == '250000000000000000000000000000'
+          assert accepted['payTo'] == 'nano_1bfapscrwk7t66faz9emcqo318698d4yc9n7p8rh8gjuttg8ehgajgzw4bk1'
+          print(json.dumps({'metadata': 'READY', 'unpaid_status': 402, 'quote': quote}, indent=2))
+          PY
