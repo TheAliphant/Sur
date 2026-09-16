@@ -1,0 +1,10 @@
+{
+  "name": "nano-courier-x402",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Program-callable non-custodial Nano block courier paid through x402 exact on nano:mainnet",
+  "license": "MIT",
+  "dependencies": {
+    "nanocurrency": "^2.5.0"
+  }
+}
