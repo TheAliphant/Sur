@@ -1,10 +1,12 @@
 {
   "name": "nano-courier-x402",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Program-callable non-custodial Nano block courier paid through x402 exact on nano:mainnet",
+  "description": "Program-callable non-custodial Nano block courier with x402 payment rails on Nano and Base USDC",
   "license": "MIT",
   "dependencies": {
+    "@x402/core": "^2.26.0",
+    "@x402/evm": "^2.26.0",
     "nanocurrency": "^2.5.0"
   }
 }
