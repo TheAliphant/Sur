@@ -2,6 +2,9 @@
   "functions": {
     "api/courier.js": {
       "maxDuration": 60
+    },
+    "api/courier-usdc.mjs": {
+      "maxDuration": 60
     }
   },
   "rewrites": [
