@@ -1,0 +1,24 @@
+name: One-time Binance Nano treasury test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - jobs/treasury_binance_1xno.py
+      - .github/workflows/treasury-binance-1xno.yml
+
+permissions:
+  contents: read
+
+jobs:
+  broadcast-once:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pre-read, broadcast exactly once, and confirm
+        run: python3 jobs/treasury_binance_1xno.py | tee treasury-binance-1xno-result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: treasury-binance-1xno-result
+          path: treasury-binance-1xno-result.json
