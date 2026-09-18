@@ -17,7 +17,9 @@ DESTINATION = "nano_1zo9c6wdzrdzriuxddw7y85ji3jdiph8g7ph1g9k5b1q9mpy9wyebgf37cxw
 AMOUNT_RAW = "1000000000000000000000000000000"
 BALANCE_BEFORE = "3050000000000000000000000000000"
 EXPECTED_HASH = "DB7E911DB7384DFC940D944067DF2B3BF60C2700BB85EF9AA3FB9F32D81784F8"
-THRESHOLD = 0xFFFFFE0000000000
+# Epoch-2 send/change threshold. The lower receive threshold produces work
+# that a node correctly rejects for this send block.
+THRESHOLD = 0xFFFFFFF800000000
 BLOCK = {
     "type": "state",
     "account": SOURCE,
