@@ -12,8 +12,9 @@ const SOURCE='39e6bc122f16d17f0ae9abf47c048c8a8743c454';
 const HASH='A'.repeat(64), FP1='B'.repeat(64), FP2='C'.repeat(64);
 function env({rpc='ABSENT_BOTH',signature=true,verified=true,settleFails=false,deliverFails=false}={}){
  const ledger=new Map();
- const counts={settle:0,deliver:0,claim:0,markInFlight:0,blockInfo:0};
+ const counts={settle:0,deliver:0,claim:0,beginSettlement:0,blockInfo:0};
  const store={
+   async peek(hash,fp){const i=ledger.get(hash);if(!i)return null;return i.fp!==fp?{state:'CONFLICT'}:{...i};},
    async claim(hash,fp){
      counts.claim++;
      let item=ledger.get(hash);
@@ -21,7 +22,7 @@ function env({rpc='ABSENT_BOTH',signature=true,verified=true,settleFails=false,d
      if(item.fp!==fp)return {state:'CONFLICT'};
      return {...item};
    },
-   async markInFlight(hash,fp){counts.markInFlight++;const i=ledger.get(hash);assert.equal(i.fp,fp);i.state='IN_FLIGHT';},
+   async beginSettlement(hash,fp){const i=ledger.get(hash);if(!i||i.fp!==fp||i.state!=='RESERVED')return false;i.state='IN_FLIGHT';counts.beginSettlement++;return true;},
    async markSettled(hash,fp,receipt){const i=ledger.get(hash);assert.equal(i.fp,fp);i.receipt=receipt;i.state='SETTLED';},
    async markDelivered(hash,fp,receipt,delivery){const i=ledger.get(hash);assert.equal(i.fp,fp);i.receipt=receipt;i.delivery=delivery;i.state='DELIVERED';},
  };
@@ -50,4 +51,5 @@ test('a different payment cannot buy the same already delivered signed block',as
 test('ambiguous settlement failure is never automatically re-settled',async()=>{const e=env({settleFails:true});const a=await e.run();assert.equal(a.status,'SETTLEMENT_UNKNOWN_RECONCILE');const b=await e.run();assert.equal(b.status,'RECONCILE_SETTLEMENT_FIRST');assert.equal(e.counts.settle,1);});
 test('paid but delivery failed can recover same receipt without another settlement',async()=>{const e=env({deliverFails:true});const a=await e.run();assert.equal(a.status,'PAID_RECOVERY_REQUIRED');e.deps.deliver=async()=>{e.counts.deliver++;return {confirmed:true,hash:HASH};};const b=await e.run();assert.equal(b.status,'DELIVERED');assert.equal(e.counts.settle,1);assert.equal(e.counts.deliver,2);});
 test('concurrent distinct payment fingerprints produce exactly one mock settlement',async()=>{const e=env();const out=await Promise.all(Array.from({length:20},(_,i)=>e.run(i%2?FP1:FP2)));assert.equal(e.counts.settle,1);assert.equal(out.filter(x=>x.status==='DELIVERED').length,1);});
+test('paid recovery still works after work block appears as confirmed on an independent RPC',async()=>{const e=env({deliverFails:true});const a=await e.run();assert.equal(a.status,'PAID_RECOVERY_REQUIRED');e.deps.checkTwoIndependentRpcs=async()=>{e.counts.blockInfo++;return 'CONFIRMED';};e.deps.deliver=async()=>{e.counts.deliver++;return {confirmed:true,hash:HASH};};const b=await e.run();assert.equal(b.status,'DELIVERED');assert.equal(e.counts.settle,1);});
 test('no network APIs or real facilitator are needed for this synthetic test',async()=>{const e=env();const r=await e.run();assert.equal(r.status,'DELIVERED');assert.equal(e.counts.blockInfo,2);});
