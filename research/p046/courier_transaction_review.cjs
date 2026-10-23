@@ -17,7 +17,7 @@ function requireDeps(deps) {
   }
   if (typeof deps.store.peek !== 'function' || typeof deps.store.claim !== 'function' ||
       typeof deps.store.beginSettlement !== 'function' || typeof deps.store.markSettled !== 'function' ||
-      typeof deps.store.markDelivered !== 'function')
+      typeof deps.store.markDelivered !== 'function' || typeof deps.store.beginDelivery !== 'function')
     throw new Error('DURABLE_ATOMIC_STORE_REQUIRED');
 }
 // Store contract (not an implementation): claim MUST be atomic across Vercel workers;
@@ -27,6 +27,9 @@ function requireDeps(deps) {
 // receipt recovery even after an independent RPC sees the service block as published.
 // Key by canonical signed-block hash; retain IN_FLIGHT/SETTLED/DELIVERED durably.
 // A crash after facilitator settle but before markSettled MUST NOT trigger re-settle.
+// beginDelivery MUST atomically acquire SETTLED -> DELIVERY_IN_FLIGHT across all workers.
+// Unknown work/broadcast outcome MUST NOT blindly invoke deliver a second time;
+// only independent confirmed native chain evidence may settle a stuck delivery.
 async function guardedCourier(job, deps) {
   try { requireDeps(deps); } catch (error) { return {status:'CONFIG_BLOCKED', paid:false, reason:error.message}; }
   if (!safeJob(job)) return {status:'INVALID_JOB',paid:false};
@@ -41,6 +44,7 @@ async function guardedCourier(job, deps) {
   if (prior?.state === 'CONFLICT') return {status:'ANOTHER_PAYMENT_OR_JOB',paid:false};
   if (prior?.state === 'DELIVERED') return {status:'ALREADY_DELIVERED',paid:true,receipt:prior.receipt};
   if (prior?.state === 'IN_FLIGHT') return {status:'RECONCILE_SETTLEMENT_FIRST',paid:'UNKNOWN'};
+  if (prior?.state === 'DELIVERY_IN_FLIGHT') return reconcileDelivery(job,deps,prior);
   if (prior?.state === 'SETTLED') return finishPaidDelivery(job,deps,prior.receipt);
   if (prior && prior.state !== 'RESERVED') return {status:'UNKNOWN_STORE_STATE',paid:'UNKNOWN'};
 
@@ -56,6 +60,7 @@ async function guardedCourier(job, deps) {
   if (!claim || claim.state === 'CONFLICT') return {status:'ANOTHER_PAYMENT_OR_JOB',paid:false};
   if (claim.state === 'DELIVERED') return {status:'ALREADY_DELIVERED',paid:true,receipt:claim.receipt};
   if (claim.state === 'IN_FLIGHT') return {status:'RECONCILE_SETTLEMENT_FIRST',paid:'UNKNOWN'};
+  if (claim.state === 'DELIVERY_IN_FLIGHT') return reconcileDelivery(job,deps,claim);
   if (!['RESERVED','SETTLED'].includes(claim.state))
     return {status:'UNKNOWN_STORE_STATE',paid:'UNKNOWN'};
 
@@ -82,12 +87,39 @@ async function guardedCourier(job, deps) {
   }
   return finishPaidDelivery(job,deps,receipt);
 }
+async function reconcileDelivery(job,deps,prior){
+  // A previous worker may already have broadcast. Never broadcast again
+  // automatically when the outcome is unknown, even if both RPCs say absent.
+  if (!prior?.receipt || prior.receipt.success !== true)
+    return {status:'RECEIPT_UNVERIFIED_RECONCILE',paid:'UNKNOWN'};
+  let observed='UNKNOWN';
+  try { observed=await deps.checkTwoIndependentRpcs(job.hash); } catch {}
+  if (observed !== 'CONFIRMED')
+    return {status:'PAID_DELIVERY_RECONCILIATION_REQUIRED',paid:true,receipt:prior.receipt,observed};
+  const delivery={hash:job.hash,confirmed:true,evidence:'DUAL_INDEPENDENT_RPC_CONFIRMED'};
+  try { await deps.store.markDelivered(job.hash,job.paymentFingerprint,prior.receipt,delivery); }
+  catch { return {status:'CONFIRMED_BUT_STORE_UNCERTAIN',paid:true,receipt:prior.receipt}; }
+  return {status:'RECOVERED_CONFIRMED',paid:true,receipt:prior.receipt,delivery};
+}
 async function finishPaidDelivery(job,deps,receipt){
   // Existing durable settled receipt; does not invoke facilitator settlement.
   if (!receipt || receipt.success !== true) return {status:'RECEIPT_UNVERIFIED_RECONCILE',paid:'UNKNOWN'};
+  let won;
+  try { won=await deps.store.beginDelivery(job.hash,job.paymentFingerprint); }
+  catch { return {status:'DURABLE_DELIVERY_LEASE_UNCERTAIN',paid:true,receipt}; }
+  if (won !== true) {
+    let prior;
+    try { prior=await deps.store.peek(job.hash,job.paymentFingerprint); }
+    catch { return {status:'DURABLE_DELIVERY_LEASE_UNCERTAIN',paid:true,receipt}; }
+    if (prior?.state === 'DELIVERED')
+      return {status:'ALREADY_DELIVERED',paid:true,receipt:prior.receipt};
+    return reconcileDelivery(job,deps,prior);
+  }
   let delivery;
   try { delivery=await deps.deliver(job,receipt); }
-  catch { return {status:'PAID_RECOVERY_REQUIRED',paid:true,receipt}; }
+  catch { return {status:'PAID_DELIVERY_UNKNOWN_RECONCILE',paid:true,receipt}; }
+  if (delivery?.confirmed !== true || delivery?.hash !== job.hash)
+    return {status:'PAID_DELIVERY_UNVERIFIED_RECONCILE',paid:true,receipt};
   try { await deps.store.markDelivered(job.hash,job.paymentFingerprint,receipt,delivery); }
   catch { return {status:'DELIVERED_STORE_UNCERTAIN',paid:true,receipt}; }
   return {status:'DELIVERED',paid:true,receipt,delivery};
