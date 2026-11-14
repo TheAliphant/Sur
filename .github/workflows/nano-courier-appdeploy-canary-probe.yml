@@ -1,4 +1,4 @@
-name: Verify isolated Nano Courier AppDeploy recovery (unpaid only)
+name: Verify isolated Nano Courier recovery payment contract (no spending)
 on:
   workflow_dispatch:
 permissions:
@@ -6,52 +6,86 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 6
     env:
       ENDPOINT: https://api-v2.appdeploy.ai/app/wallenhof-nano-courier-recovery-canary-4nhzyy/api/courier
     steps:
-      - name: Verify metadata, x402 offer and uncharged canary hold
+      - name: Read-only metadata and unpaid x402 contract
         shell: bash
         run: |
           set -euo pipefail
-          code="$(curl -sS --max-time 15 -D get.headers -o get.json -w '%{http_code}' "$ENDPOINT")"
-          echo "METADATA_HTTP=$code"
-          test "$code" = "200"
+          status="$(curl -sS --max-time 15 -D get.headers -o get.json -w '%{http_code}' "$ENDPOINT")"
+          echo "METADATA_HTTP=$status"
+          test "$status" = "200"
           python3 - <<'PY'
           import json
           data=json.load(open('get.json'))
           assert data['service']=='Wallenhof Nano Courier'
-          assert data['status']=='CANARY_ONLY'
+          assert data['status']=='READY'
+          assert data['payment_acceptance_enabled'] is True
           assert data['payment']['network']=='nano:mainnet'
           assert data['payment']['payTo']=='nano_1bfapscrwk7t66faz9emcqo318698d4yc9n7p8rh8gjuttg8ehgajgzw4bk1'
           assert data['price']=='0.25 XNO'
           assert data['custody'] is False
-          assert data['payment_acceptance_enabled'] is False
-          print('METADATA_CANARY_PASS')
+          print('GET_READY_IDENTICAL_CONTRACT_PASS')
           PY
-          code="$(curl -sS --max-time 15 -X POST -H 'content-type: application/json' --data '{}' -D unpaid.headers -o unpaid.json -w '%{http_code}' "$ENDPOINT")"
-          echo "UNPAID_HTTP=$code"
-          test "$code" = "402"
+          status="$(curl -sS --max-time 15 -X POST -H 'content-type: application/json' --data '{}' -D unpaid.headers -o unpaid.json -w '%{http_code}' "$ENDPOINT")"
+          echo "UNPAID_HTTP=$status"
+          test "$status" = "402"
           python3 - <<'PY'
           import base64,json
-          headers=open('unpaid.headers').read().splitlines()
-          fields={line.split(':',1)[0].strip().lower():line.split(':',1)[1].strip() for line in headers if ':' in line}
-          quote=json.loads(base64.b64decode(fields['payment-required']))
-          assert quote['x402Version']==2
-          assert quote['resource']['url']=='https://api-v2.appdeploy.ai/app/wallenhof-nano-courier-recovery-canary-4nhzyy/api/courier'
-          [x]=quote['accepts']
+          fields={row.split(':',1)[0].strip().lower():row.split(':',1)[1].strip() for row in open('unpaid.headers').read().splitlines() if ':' in row}
+          q=json.loads(base64.b64decode(fields['payment-required']))
+          assert q['x402Version']==2
+          assert q['resource']['url']=='https://api-v2.appdeploy.ai/app/wallenhof-nano-courier-recovery-canary-4nhzyy/api/courier'
+          [x]=q['accepts']
           assert (x['scheme'],x['network'],x['asset'])==('exact','nano:mainnet','XNO')
           assert x['amount']=='250000000000000000000000000000'
           assert x['payTo']=='nano_1bfapscrwk7t66faz9emcqo318698d4yc9n7p8rh8gjuttg8ehgajgzw4bk1'
           print('UNPAID_X402_CONTRACT_PASS')
           PY
-          code="$(curl -sS --max-time 15 -X POST -H 'content-type: application/json' -H 'payment-signature: SYNTHETIC_NOT_A_PAYMENT' --data '{}' -D hold.headers -o hold.json -w '%{http_code}' "$ENDPOINT")"
-          echo "SYNTHETIC_HEADER_HTTP=$code"
-          test "$code" = "503"
+      - name: Prove invalid signed blocks are rejected before any settlement
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS --max-time 15 -X POST -H 'content-type: application/json' -H 'payment-signature: e30=' --data '{}' -D invalid.headers -o invalid.json -w '%{http_code}' "$ENDPOINT")"
+          echo "INVALID_BLOCK_HTTP=$code"
+          test "$code" = "422"
           python3 - <<'PY'
           import json
-          data=json.load(open('hold.json'))
-          assert data['paid'] is False
-          assert data['error']=='recovery_canary_only'
-          print('NO_CHARGE_HOLD_PASS')
+          d=json.load(open('invalid.json'))
+          assert d['paid'] is False
+          assert d['ok'] is False
+          print('INVALID_BLOCK_ZERO_SETTLEMENT_PASS')
           PY
+      - name: Verify signed block cryptography and reject an empty payment payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nano-test"
+          npm --prefix "$RUNNER_TEMP/nano-test" install --no-audit --no-fund --ignore-scripts --no-save nanocurrency@2.5.0 >/dev/null
+          NODE_PATH="$RUNNER_TEMP/nano-test/node_modules" node <<'JS'
+          const crypto=require('node:crypto');
+          const fs=require('node:fs');
+          const N=require('nanocurrency');
+          const secret=N.deriveSecretKey(crypto.randomBytes(32).toString('hex').toUpperCase(),0);
+          const publicKey=N.derivePublicKey(secret);
+          const account=N.deriveAddress(publicKey,{useNanoPrefix:true});
+          const previous='0'.repeat(64),link='0'.repeat(64),representative=account,balance='0';
+          const hash=N.hashBlock({account,previous,representative,balance,link});
+          const signature=N.signBlock({hash,secretKey:secret});
+          if(!N.verifyBlock({hash,signature,publicKey}))throw Error('synthetic fixture not self-validating');
+          fs.writeFileSync('fixture.json',JSON.stringify({block:{type:'state',account,previous,representative,balance,link,signature,work:''},subtype:'open'}));
+          console.log('OFFLINE_SYNTHETIC_SIGNATURE_PASS');
+          JS
+          code="$(curl -sS --max-time 25 -X POST -H 'content-type: application/json' -H 'payment-signature: e30=' --data-binary @fixture.json -D verify.headers -o verify.json -w '%{http_code}' "$ENDPOINT")"
+          echo "EMPTY_PAYMENT_VERIFY_HTTP=$code"
+          python3 - <<'PY'
+          import json,os
+          body=json.load(open('verify.json'))
+          assert body.get('paid') is not True, body
+          assert os.environ.get('EXPECTED_PAYMENT_STATUS','402')=='402'
+          assert body.get('error')=='payment_invalid', body
+          print('FACILITATOR_REJECTS_INVALID_PAYMENT_PASS')
+          PY
+          test "$code" = "402"
