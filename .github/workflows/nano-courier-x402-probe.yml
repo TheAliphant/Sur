@@ -23,8 +23,14 @@ jobs:
             host="$(printf '%s' "$endpoint" | cut -d/ -f3)"
             echo "PROBE_HOST=$host"
             getent ahostsv4 "$host" | head -n 2 || true
-            status="$(curl --silent --show-error --max-time 12 --output /dev/null --write-out '%{http_code}' "$endpoint")" || status="000"
+            status="$(curl --silent --show-error --max-time 12 --dump-header /tmp/courier-probe-headers --output /tmp/courier-probe-body --write-out '%{http_code}' "$endpoint")" || status="000"
             echo "PROBE_HTTP=$status"
+            grep -iE '^(HTTP/|x-vercel-error:|content-type:|server:)' /tmp/courier-probe-headers || true
+            if [ "$status" != "200" ]; then
+              echo "PROBE_BODY_FIRST_600_BYTES:"
+              head -c 600 /tmp/courier-probe-body || true
+              echo
+            fi
           done
       - name: Verify public metadata and unpaid 402 contract
         env:
