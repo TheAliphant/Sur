@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/nano-courier-x402-probe.yml
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,9 +14,21 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
+      - name: Read-only DNS and GET status of both existing public aliases
+        env:
+          PRIMARY: https://nano-courier-x402.vercel.app/api/courier
+          ALTERNATE: https://nano-courier-x402-tindeth-s-projects.vercel.app/api/courier
+        run: |
+          for endpoint in "$PRIMARY" "$ALTERNATE"; do
+            host="$(printf '%s' "$endpoint" | cut -d/ -f3)"
+            echo "PROBE_HOST=$host"
+            getent ahostsv4 "$host" | head -n 2 || true
+            status="$(curl --silent --show-error --max-time 12 --output /dev/null --write-out '%{http_code}' "$endpoint")" || status="000"
+            echo "PROBE_HTTP=$status"
+          done
       - name: Verify public metadata and unpaid 402 contract
         env:
-          ENDPOINT: https://nano-courier-x402-tindeth-s-projects.vercel.app/api/courier
+          ENDPOINT: https://nano-courier-x402.vercel.app/api/courier
         run: |
           set -euo pipefail
           for attempt in 1 2 3 4 5; do
