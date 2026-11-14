@@ -1,0 +1,57 @@
+name: Verify isolated Nano Courier AppDeploy recovery (unpaid only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      ENDPOINT: https://api-v2.appdeploy.ai/app/wallenhof-nano-courier-recovery-canary-4nhzyy/api/courier
+    steps:
+      - name: Verify metadata, x402 offer and uncharged canary hold
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS --max-time 15 -D get.headers -o get.json -w '%{http_code}' "$ENDPOINT")"
+          echo "METADATA_HTTP=$code"
+          test "$code" = "200"
+          python3 - <<'PY'
+          import json
+          data=json.load(open('get.json'))
+          assert data['service']=='Wallenhof Nano Courier'
+          assert data['status']=='CANARY_ONLY'
+          assert data['payment']['network']=='nano:mainnet'
+          assert data['payment']['payTo']=='nano_1bfapscrwk7t66faz9emcqo318698d4yc9n7p8rh8gjuttg8ehgajgzw4bk1'
+          assert data['price']=='0.25 XNO'
+          assert data['custody'] is False
+          assert data['payment_acceptance_enabled'] is False
+          print('METADATA_CANARY_PASS')
+          PY
+          code="$(curl -sS --max-time 15 -X POST -H 'content-type: application/json' --data '{}' -D unpaid.headers -o unpaid.json -w '%{http_code}' "$ENDPOINT")"
+          echo "UNPAID_HTTP=$code"
+          test "$code" = "402"
+          python3 - <<'PY'
+          import base64,json
+          headers=open('unpaid.headers').read().splitlines()
+          fields={line.split(':',1)[0].strip().lower():line.split(':',1)[1].strip() for line in headers if ':' in line}
+          quote=json.loads(base64.b64decode(fields['payment-required']))
+          assert quote['x402Version']==2
+          assert quote['resource']['url']=='https://api-v2.appdeploy.ai/app/wallenhof-nano-courier-recovery-canary-4nhzyy/api/courier'
+          [x]=quote['accepts']
+          assert (x['scheme'],x['network'],x['asset'])==('exact','nano:mainnet','XNO')
+          assert x['amount']=='250000000000000000000000000000'
+          assert x['payTo']=='nano_1bfapscrwk7t66faz9emcqo318698d4yc9n7p8rh8gjuttg8ehgajgzw4bk1'
+          print('UNPAID_X402_CONTRACT_PASS')
+          PY
+          code="$(curl -sS --max-time 15 -X POST -H 'content-type: application/json' -H 'payment-signature: SYNTHETIC_NOT_A_PAYMENT' --data '{}' -D hold.headers -o hold.json -w '%{http_code}' "$ENDPOINT")"
+          echo "SYNTHETIC_HEADER_HTTP=$code"
+          test "$code" = "503"
+          python3 - <<'PY'
+          import json
+          data=json.load(open('hold.json'))
+          assert data['paid'] is False
+          assert data['error']=='recovery_canary_only'
+          print('NO_CHARGE_HOLD_PASS')
+          PY
