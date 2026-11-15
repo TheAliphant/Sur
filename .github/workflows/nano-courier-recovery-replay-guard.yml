@@ -1,0 +1,66 @@
+name: Nano Courier recovery — paid-block replay safety (no spend)
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/nano-courier-recovery-replay-guard.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  replay-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Verify a real already-confirmed signed Nano state block cannot be recharged
+        env:
+          ENDPOINT: https://api-v2.appdeploy.ai/app/wallenhof-nano-courier-recovery-canary-4nhzyy/api/courier
+          RECIPIENT: nano_1bfapscrwk7t66faz9emcqo318698d4yc9n7p8rh8gjuttg8ehgajgzw4bk1
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          from urllib.error import HTTPError
+          nodes = ["https://node.somenano.com/proxy", "https://nanoslo.0x.no/proxy"]
+          endpoint, account = os.environ["ENDPOINT"], os.environ["RECIPIENT"]
+          def call(url, payload):
+              req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"content-type":"application/json","user-agent":"sur-recovery-replay-safety/1.0"})
+              with urllib.request.urlopen(req, timeout=13) as resp:
+                  return json.load(resp)
+          choices = []
+          for node in nodes:
+              try:
+                  info = call(node, {"action":"account_info", "account":account})
+                  frontier = info.get("frontier")
+                  if not frontier: continue
+                  block_info = call(node, {"action":"block_info","json_block":"true","hash":frontier})
+                  if block_info.get("error") or str(block_info.get("confirmed")).lower() != "true": continue
+                  contents = block_info.get("contents")
+                  if isinstance(contents, str): contents = json.loads(contents)
+                  subtype = block_info.get("subtype") or contents.get("subtype")
+                  if contents.get("type") != "state" or subtype not in ("send","receive","open","change"): continue
+                  choices.append((frontier.upper(), contents, subtype, node))
+                  break
+              except Exception as e:
+                  print("RPC_READ_ERROR", node, type(e).__name__)
+          assert choices, "INCONCLUSIVE: public RPC did not supply a confirmed signed state block; do not claim replay guard passed"
+          frontier, contents, subtype, source = choices[0]
+          payload = {"block":{k:contents.get(k) for k in ["account","previous","representative","balance","link","signature"]}, "subtype":subtype}
+          assert all(payload["block"].values()), "INCONCLUSIVE: chain returned incomplete signed block"
+          # Deliberately invalid synthetic payment; no wallet, keys, payment or settlement.
+          fake = base64.b64encode(b'{"x402Version":2,"payload":{}}').decode()
+          req = urllib.request.Request(endpoint,data=json.dumps(payload).encode(),headers={"content-type":"application/json","payment-signature":fake},method="POST")
+          try:
+              with urllib.request.urlopen(req, timeout=35) as resp:
+                  status, body = resp.status, resp.read()
+          except HTTPError as err:
+              status, body = err.code, err.read()
+          result = json.loads(body)
+          print(json.dumps({"source_rpc":source,"chain_hash":frontier,"http":status,"error":result.get("error"),"paid":result.get("paid"),"computed_hash":result.get("computed_hash")},sort_keys=True))
+          assert status == 409, "FAIL: pre-existing signed block did not receive no-payment HTTP 409"
+          assert result.get("error") == "signed_block_already_published"
+          assert result.get("paid") is False
+          assert result.get("computed_hash","").upper() == frontier
+          print("PASS: already confirmed published block returns no-charge 409; no payment was submitted")
+          PY
