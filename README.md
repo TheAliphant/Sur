@@ -6,7 +6,7 @@
 
 | Service | Endpoint | Price | Verification status |
 | --- | --- | --- | --- |
-| Nano mainnet signed-block courier | [Recovery API](https://api-v2.appdeploy.ai/app/wallenhof-nano-courier-recovery-canary-4nhzyy/api/courier) | 0.25 XNO per confirmed block | Public unpaid protocol and replay safety checks passed; **first real paid recovery delivery not yet demonstrated** |
+| Nano mainnet signed-block courier | [Recovery API](https://api-v2.appdeploy.ai/app/wallenhof-nano-courier-recovery-canary-4nhzyy/api/courier) | 0.25 XNO per settled request; delivery is not guaranteed | Public unpaid protocol and replay safety checks passed; **first real paid recovery delivery not yet demonstrated** |
 | Base USDC courier | [API](https://api-v2.appdeploy.ai/app/demand-factory-base-courier-az59go/api/courier-usdc) | 0.25 USDC | Canary; no verified paid deliveries |
 | Deterministic hash | [API](https://api-v2.appdeploy.ai/app/demand-factory-base-courier-az59go/api/hash) | 0.001 USDC | Canary; no verified paid deliveries |
 | Canonical JSON and SHA-256 | [API](https://api-v2.appdeploy.ai/app/demand-factory-base-courier-az59go/api/canonical-json) | 0.001 USDC | Canary; no verified paid deliveries |
@@ -19,6 +19,8 @@ These are **machine APIs**, not a website checkout or a request for wallet keys.
 2. An **unpaid POST** returns an x402 v2 `PAYMENT-REQUIRED` challenge, including the exact `nano:mainnet` payment terms. Inspect those terms in your own x402 client before deciding whether to pay.
 3. If proceeding with a **new** request, create and sign the Nano `state` block **locally**, excluding proof-of-work. Supply `{"block":{...},"subtype":"send"}` or the appropriate `receive`, `open` or `change` subtype. Do **not** share any seed, private key, wallet credentials or recovery phrase.
 4. A compatible x402 v2 client supplies the normal `PAYMENT-SIGNATURE` for the exact resource. Keep the returned payment and block hashes and confirm the result independently.
+
+**Payment and delivery are distinct:** The existing implementation settles a valid x402 payment **before** attempting work generation, Nano broadcast and confirmation. A paid request can therefore end in `PAID_DELIVERY_UNRESOLVED`; it is not a per-confirmed-block guarantee. In that case, preserve the payment receipt and signed block hash and request reconciliation, **not another payment**.
 
 **Critical safety:** Do not blindly retry a paid request. Verify whether settlement or Nano publication already occurred. The isolated recovery service has shown invalid-payment rejection and an already-confirmed block replay returning 409 with `paid:false`; a *new real paid* recovery-host delivery and concurrent valid-payment exactly-once guarantee remain unproven. The recovery endpoint rejects ambiguous Nano-RPC status instead of assuming a block was unpublished.
 
