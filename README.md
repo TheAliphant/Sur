@@ -8,8 +8,10 @@
 | --- | --- | --- | --- |
 | Nano mainnet signed-block courier | [Recovery API](https://api-v2.appdeploy.ai/app/wallenhof-nano-courier-recovery-canary-4nhzyy/api/courier) | 0.25 XNO per settled request; delivery is not guaranteed | Public unpaid protocol and replay safety checks passed; **first real paid recovery delivery not yet demonstrated** |
 | Base USDC courier | [API](https://api-v2.appdeploy.ai/app/demand-factory-base-courier-az59go/api/courier-usdc) | 0.25 USDC | Canary; no verified paid deliveries |
-| Deterministic hash | [API](https://api-v2.appdeploy.ai/app/demand-factory-base-courier-az59go/api/hash) | 0.001 USDC | Canary; no verified paid deliveries |
-| Canonical JSON and SHA-256 | [API](https://api-v2.appdeploy.ai/app/demand-factory-base-courier-az59go/api/canonical-json) | 0.001 USDC | Canary; no verified paid deliveries |
+| Deterministic hash | [API](https://api-v2.appdeploy.ai/app/demand-factory-base-courier-az59go/api/hash) | Historical 0.001 USDC; price discrepancy — see notice below | Canary; no verified paid deliveries |
+| Canonical JSON and SHA-256 | [API](https://api-v2.appdeploy.ai/app/demand-factory-base-courier-az59go/api/canonical-json) | Historical 0.001 USDC; price discrepancy — see notice below | Canary; no verified paid deliveries |
+
+**Price reconciliation notice (24 November 2026):** The historical listing for the hash and canonical-JSON utilities is 0.001 USDC per call, but the currently stored AppDeploy deployment snapshot `1790014228440` declares `$0.01` in its catalog, OpenAPI/llms.txt and payment-collection code. The current external payment challenge could not be independently read during this check. Do not authorize payment at a conflicting price; inspect the unpaid x402 challenge and request clarification here before proceeding. This notice does not authorize a price change or modify the API, recipient, network, or any prepaid credit. The free catalog route is `/api/catalog` (ordinary GET without a payment header).
 
 These are **machine APIs**, not a website checkout or a request for wallet keys. The Nano price, network, payment recipient and protocol remain unchanged from the protected existing service.
 
