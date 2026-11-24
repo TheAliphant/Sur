@@ -28,6 +28,24 @@ These are **machine APIs**, not a website checkout or a request for wallet keys.
 
 **Previously prepaid work must not be paid for twice.** Earlier purchaser `pursekeeper` documented two advance payments (10 and 15 XNO); the actual unused credit is still being reconciled. The recovery API does **not** yet expose authenticated prepaid redemption. Customers with prepaid orders should use the [existing public order thread](https://github.com/TheAliphant/Sur/issues/2) rather than purchasing them again.
 
+## Base utility integrator preflight — no payment
+
+Before integrating either utility, inspect the [free machine-readable catalog](https://api-v2.appdeploy.ai/app/demand-factory-base-courier-az59go/api/catalog). The stored deployment `1790014228440` documents SHA-256/SHA-512 hashing and recursively key-sorted compact JSON with a SHA-256 digest. The catalog is a discovery surface, not proof of paid delivery.
+
+Both utility handlers implement an explicit `probe: true` mode that rejects payment headers before settlement. These examples request only the unpaid challenge; they do not send credentials, a wallet signature or customer data:
+
+```sh
+BASE=https://api-v2.appdeploy.ai/app/demand-factory-base-courier-az59go
+curl -sS -i --max-time 15 -X POST "$BASE/api/hash" \
+  -H 'Content-Type: application/json' --data '{"probe":true}'
+curl -sS -i --max-time 15 -X POST "$BASE/api/canonical-json" \
+  -H 'Content-Type: application/json' --data '{"probe":true}'
+```
+
+Expected from the stored source: HTTP 402 with x402 payment terms. A bare hosting-provider 402, missing terms, timeout or price mismatch is **not** a successful preflight. Inspect network, asset, exact price, resource and recipient; do not attach a payment header to a probe. The live challenge was not reachable through our read tool on 25 November 2026, so the above commands are source-checked examples, not fresh live acceptance.
+
+For evaluating fit only, the documented request shape for hashing is `{"text":"hello","algorithm":"sha256"}` (UTF-8, up to 100,000 bytes; `sha512` also supported). Canonical JSON accepts `{"value":{"b":2,"a":1}}` (up to 100,000 serialized JSON bytes). Neither example is a purchase instruction. The price reconciliation notice above remains in force: do not authorize payment at a conflicting price.
+
 ## Verification and support
 
 - [Public service offer, technical limitations and independent test links](https://github.com/TheAliphant/Sur/issues/5)
